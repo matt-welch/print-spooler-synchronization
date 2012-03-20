@@ -1,0 +1,6 @@
+syntax: glob
+.cproject
+.project
+spooler
+a.out
+
