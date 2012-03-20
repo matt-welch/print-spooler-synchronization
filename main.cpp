@@ -1,6 +1,6 @@
 /*******************************************************************************
  * FILENAME:	main.cpp
- * NAME:		Print Spooler Synchroization
+ * NAME:		Print Spooler Synchronization Driver
  * AUTHOR: 		James Matthew Welch [JMW]
  * SCHOOL:		Arizona State University
  * CLASS:		CSE430::Operating Systems
