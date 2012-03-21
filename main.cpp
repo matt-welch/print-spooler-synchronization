@@ -37,29 +37,76 @@ using std::getline;
 #include <string>
 using std::string;
 
+#include <sstream>
+using std::stringstream;
+
 #include <pthread.h>
+
+#include <vector>
+using std::vector;
+
+#include <map>
+using std::map;
+
+typedef string Instruction;
+typedef vector<Instruction> Program;
+
+// local function declarations
+map<int, Program> readProgramSource();
 
 int main(int argc, char* argv[]){
 	// local variables:
+
+
+	map<int, Program> TaskSet = readProgramSource();
+
+
+	/*pseudocode for project:
+	 *
+	 * while(file.hasLines)
+	 * 		storeLineInVector
+	 *
+	 * while(vector.hasLinesToExecute)
+	 * 		executeLine
+	 *
+	 */
+
+	// program's done
+	return 0;
+}
+
+map<int, Program> readProgramSource(void){
 	ifstream infile;
-	string expression;
+	Instruction expression;
+	stringstream inFileNameStream;
+	string inFileName;
+	map<int, Program> TaskSet;
+	const int MAX_PROGRAMS = 10;
 
-	// default filename: multiple files of form "progi.txt"
-	string inFileName = "../input/prog1.txt";
+	for(int i = 1; i <= MAX_PROGRAMS; ++i){
+		// build filename: multiple files of form "progi.txt"
+		inFileNameStream << "../input/prog" << i << ".txt";
+		inFileName = inFileNameStream.str();
 
-	// Open graph file for reading
-	infile.open((char*)inFileName.c_str());
+		// Open pseudo-program file for reading
+		infile.open((char*)inFileName.c_str());
 
-	if(infile.fail()){
-		cout << endl <<"An error occurred while reading from the file \""
-				<< inFileName << "\"." << endl;
-		return(-1);
-	}else{
-		// read the pseudocode from the files available.  start with default
-		while(infile.good()){
-			getline(infile, expression); // read in the number of nodes from the first line
-			cout << expression << endl;
+		if(infile.fail()){
+			cout << endl <<"No program of name \""
+					<< inFileName << "\" exists." << endl;
+		}else{
+			// read the pseudocode from the files available.  start with default
+			cout << endl << "PrintSpooler: Contents of program \"" << inFileName << "\":::" << endl;
+			Program currentProgram;
+			while(infile.good()){
+				getline(infile, expression); // read in the number of nodes from the first line
+				currentProgram.push_back(expression);
+				cout << expression << endl;
+			}
+			infile.close();
+			TaskSet[i] = currentProgram;
 		}
-		infile.close();
+		inFileNameStream.str("");
 	}
+	return TaskSet;
 }

@@ -3,4 +3,6 @@ syntax: glob
 .project
 spooler
 a.out
+*.o
+
 
