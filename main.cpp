@@ -57,19 +57,20 @@ map<int, Program> readProgramSource();
 int main(int argc, char* argv[]){
 	// local variables:
 
-
+	// read all program source files into a map
 	map<int, Program> TaskSet = readProgramSource();
 
+	// process commands for all Programs
+	for(map<int, Program>::iterator itr = TaskSet.begin();
+			itr != TaskSet.end();
+			++itr){
+		// here's where the magic (synchronization) happens
 
-	/*pseudocode for project:
-	 *
-	 * while(file.hasLines)
-	 * 		storeLineInVector
-	 *
-	 * while(vector.hasLinesToExecute)
-	 * 		executeLine
-	 *
-	 */
+
+
+
+	}
+
 
 	// program's done
 	return 0;
@@ -92,16 +93,19 @@ map<int, Program> readProgramSource(void){
 		infile.open((char*)inFileName.c_str());
 
 		if(infile.fail()){
-			cout << endl <<"No program of name \""
-					<< inFileName << "\" exists." << endl;
+			cout << endl <<"No program matching \"" << inFileName <<
+					"\" exists." << endl;
 		}else{
-			// read the pseudocode from the files available.  start with default
-			cout << endl << "PrintSpooler: Contents of program \"" << inFileName << "\":::" << endl;
+			// read the pseudocode programs from the files available
+			cout << endl << "PrintSpooler: Program " << i << ": \""
+					<< inFileName << "\":::" << endl;
 			Program currentProgram;
 			while(infile.good()){
-				getline(infile, expression); // read in the number of nodes from the first line
+				getline(infile, expression);
 				currentProgram.push_back(expression);
+#ifdef DEBUG
 				cout << expression << endl;
+#endif
 			}
 			infile.close();
 			TaskSet[i] = currentProgram;
