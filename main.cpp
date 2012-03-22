@@ -48,7 +48,8 @@ using std::vector;
 #include <map>
 using std::map;
 
-#include <cstdlib> // exit()
+#include <cstdlib> // atoi(), exit()
+using std::atoi;
 
 typedef string Instruction;
 typedef vector<Instruction> Program;
@@ -64,9 +65,6 @@ pthread_mutex_t CS_lock;
 int main(int argc, char* argv[]){
 	// local variables:
 	pthread_t tid[MAX_PROCESSOR_THREADS];
-
-	// read all program source files into a map
-//	map<int, Program> TaskSet = readProgramSource();
 
 	// process commands for all Programs
 	for(int i = 1; i <= MAX_PROCESSOR_THREADS; ++i){
@@ -93,10 +91,12 @@ void *Processor( void * arg){
 	int intID = *id;
 	/*-----------------------------------------------------------*/
 	ifstream infile;
-	Instruction expression;
+
 	stringstream inFileNameStream;
 	string inFileName;
 	stringstream message;
+
+	Program currentProgram;
 
 	// build filename: multiple files of form "progi.txt"
 	inFileNameStream << "../input/prog" << intID << ".txt";
@@ -110,23 +110,64 @@ void *Processor( void * arg){
 				"\" exists.\n";
 	}else{
 		// read the pseudocode programs from the files available
+#ifdef DEBUG
 		message << "\nPrintSpooler: Program " << intID << ": \""
 				<< inFileName << "\":::\n";
-		Program currentProgram;
+#endif
+		string expression;
 		while(infile.good()){
+			// clear exprTokens, token
+			string token, fcnName, fcnArg;
+			stringstream exprTokens;
+			// get next line from the program
 			getline(infile, expression);
 			if(expression != ""){
-				currentProgram.push_back(expression);
+				// put expression into a stringstream for token extraction
+				exprTokens << expression;
+#ifdef DEBUG
+	#ifdef VERBOSE
 				message << expression << endl;
+	#endif
+#endif
+				// extract tokens (assume always only two per line)
+				exprTokens >> fcnName;
+				exprTokens >> fcnArg;
+#ifdef DEBUG
+					message << "+" << fcnName << "(" << fcnArg << ")\n";
+#endif
+				if(fcnName == "NewJob"){
+					// clear the buffer
+				}else if(fcnName == "Compute"){
+					// compute factorial of fcnArg
+					int N = atoi(fcnArg.c_str());
+					int product = 1;
+					for(int i = N; i > 1; --i)
+						product = product * i;
+#ifdef DEBUG
+					message << "\t" << N << "! = " << product << endl;
+#endif
+				}else if(fcnName == "Print"){
+					// buffer print args
+				}else if(fcnName == "EndJob"){
+					// send buffer to spooler
+					// sem wait on spooler
+					// send buffer to spooler
+					// sem post on return
+				}else if(fcnName =="Terminate"){
+					// do nothing since should be the last line in the program
+
+				}
 			}
 		}
 		infile.close();
 	}
-	/*-----------------------------------------------------------*/
 
 	pthread_mutex_lock( &CS_lock);
-		cout << "\nI'm Processor Thread number " << intID;
-//		cout << message.str();
+	/* this is the CS where Processor threads will send their
+	 * output to the Spooler thread */
+		cout << "\nProcessor Thread number " << intID;
+		cout << message.str();
+		cout << endl;
 		cout.flush();
 	pthread_mutex_unlock( &CS_lock);
 	return NULL;
