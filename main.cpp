@@ -48,32 +48,96 @@ using std::vector;
 #include <map>
 using std::map;
 
+#include <cstdlib> // exit()
+
 typedef string Instruction;
 typedef vector<Instruction> Program;
 
 // local function declarations
 map<int, Program> readProgramSource();
+void * Processor(void *);
+void * Printer(void *);
+void * Spooler(void *);
+const int MAX_PROCESSOR_THREADS = 10;
+pthread_mutex_t CS_lock;
 
 int main(int argc, char* argv[]){
 	// local variables:
+	pthread_t tid[MAX_PROCESSOR_THREADS];
 
 	// read all program source files into a map
-	map<int, Program> TaskSet = readProgramSource();
+//	map<int, Program> TaskSet = readProgramSource();
 
 	// process commands for all Programs
-	for(map<int, Program>::iterator itr = TaskSet.begin();
-			itr != TaskSet.end();
-			++itr){
+	for(int i = 1; i <= MAX_PROCESSOR_THREADS; ++i){
 		// here's where the magic (synchronization) happens
-
-
-
-
+		if( pthread_create(&tid[i], NULL, Processor, (void*) i) != 0 )
+		{
+			printf( "Error: unable to create processor thread\n" );
+		}
 	}
 
+	for(int i = 1; i <= MAX_PROCESSOR_THREADS; ++i)
+		pthread_join( tid[ i ], NULL );
 
+	printf ( "\nmain() terminating\n" );
+
+	cout.flush();
+	cout << endl;
 	// program's done
 	return 0;
+}
+
+void *Processor( void * arg){
+	int *id = (int*)&arg;
+	int intID = *id;
+	/*-----------------------------------------------------------*/
+	ifstream infile;
+	Instruction expression;
+	stringstream inFileNameStream;
+	string inFileName;
+	stringstream message;
+
+	// build filename: multiple files of form "progi.txt"
+	inFileNameStream << "../input/prog" << intID << ".txt";
+	inFileName = inFileNameStream.str();
+
+	// Open pseudo-program file for reading
+	infile.open((char*)inFileName.c_str());
+
+	if(infile.fail()){
+		message << "\nNo program matching \"" << inFileName <<
+				"\" exists.\n";
+	}else{
+		// read the pseudocode programs from the files available
+		message << "\nPrintSpooler: Program " << intID << ": \""
+				<< inFileName << "\":::\n";
+		Program currentProgram;
+		while(infile.good()){
+			getline(infile, expression);
+			if(expression != ""){
+				currentProgram.push_back(expression);
+				message << expression << endl;
+			}
+		}
+		infile.close();
+	}
+	/*-----------------------------------------------------------*/
+
+	pthread_mutex_lock( &CS_lock);
+		cout << "\nI'm Processor Thread number " << intID;
+//		cout << message.str();
+		cout.flush();
+	pthread_mutex_unlock( &CS_lock);
+	return NULL;
+}
+
+void *Printer( void *){
+	return NULL;
+}
+
+void *Spooler( void *){
+	return NULL;
 }
 
 map<int, Program> readProgramSource(void){
@@ -102,10 +166,12 @@ map<int, Program> readProgramSource(void){
 			Program currentProgram;
 			while(infile.good()){
 				getline(infile, expression);
-				currentProgram.push_back(expression);
+				if(expression != ""){
+					currentProgram.push_back(expression);
 #ifdef DEBUG
-				cout << expression << endl;
+					cout << expression << endl;
 #endif
+				}
 			}
 			infile.close();
 			TaskSet[i] = currentProgram;

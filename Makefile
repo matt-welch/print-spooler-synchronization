@@ -1,5 +1,5 @@
 spooler: main.o
-	g++ main.o -o spooler 
+	g++ main.o -o spooler $(CONFIG)
 
 main.o: main.cpp
 	g++ -c main.cpp -o main.o $(CONFIG)
