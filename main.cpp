@@ -41,6 +41,7 @@ using std::string;
 using std::stringstream;
 
 #include <pthread.h>
+#include <semaphore.h>
 
 #include <vector>
 using std::vector;
@@ -60,17 +61,40 @@ void * Processor(void *);
 void * Printer(void *);
 void * Spooler(void *);
 const int MAX_PROCESSOR_THREADS = 10;
+
+map< int, vector<string> > buffer;
+vector<string> printBuffer;
+
 pthread_mutex_t CS_lock;
+sem_t spoolMutex;
+sem_t jobsAvailable;
+sem_t spoolerReady;
 
 int main(int argc, char* argv[]){
 	// local variables:
 	pthread_t tid[MAX_PROCESSOR_THREADS];
+	pthread_t spooler_tid;
+	pthread_t printer_tid;
+
+	// initialize mutex & semaphores
+	sem_init( &spoolMutex, 0, 1);
+	sem_init( &jobsAvailable, 0, 0);
+	sem_init( &spoolerReady, 0, 0);
+
+	// create spooler thread, lock it to wait for available buffers to print
+	if( pthread_create(&spooler_tid, NULL, Spooler, NULL) != 0 ){
+		printf( "Error: unable to create spooler thread\n" );
+	}
+
+	// create printer thread, lock it to wait for spooler
+	if( pthread_create(&printer_tid, NULL, Printer, NULL) != 0 ){
+		printf( "Error: unable to create printer thread\n" );
+	}
 
 	// process commands for all Programs
 	for(int i = 1; i <= MAX_PROCESSOR_THREADS; ++i){
 		// here's where the magic (synchronization) happens
-		if( pthread_create(&tid[i], NULL, Processor, (void*) i) != 0 )
-		{
+		if( pthread_create(&tid[i], NULL, Processor, (void*) i) != 0 ){
 			printf( "Error: unable to create processor thread\n" );
 		}
 	}
@@ -91,12 +115,10 @@ void *Processor( void * arg){
 	int intID = *id;
 	/*-----------------------------------------------------------*/
 	ifstream infile;
-
-	stringstream inFileNameStream;
+	stringstream inFileNameStream, message;
 	string inFileName;
-	stringstream message;
-
 	Program currentProgram;
+	vector<string> localBuffer;
 
 	// build filename: multiple files of form "progi.txt"
 	inFileNameStream << "../input/prog" << intID << ".txt";
@@ -117,7 +139,7 @@ void *Processor( void * arg){
 		string expression;
 		while(infile.good()){
 			// clear exprTokens, token
-			string token, fcnName, fcnArg;
+			string fcnName, fcnArg;
 			stringstream exprTokens;
 			// get next line from the program
 			getline(infile, expression);
@@ -137,6 +159,7 @@ void *Processor( void * arg){
 #endif
 				if(fcnName == "NewJob"){
 					// clear the buffer
+					localBuffer.clear();
 				}else if(fcnName == "Compute"){
 					// compute factorial of fcnArg
 					int N = atoi(fcnArg.c_str());
@@ -148,14 +171,23 @@ void *Processor( void * arg){
 #endif
 				}else if(fcnName == "Print"){
 					// buffer print args
+					localBuffer.push_back(fcnArg);
 				}else if(fcnName == "EndJob"){
 					// send buffer to spooler
+					// only if last print job from this processor is done
 					// sem wait on spooler
-					// send buffer to spooler
+					sem_wait( &spoolMutex);
+						// send buffer to spooler
+						buffer[intID] = localBuffer;
+						// signal spooler that buffer is ready to print
+						sem_post(&jobsAvailable);
 					// sem post on return
-				}else if(fcnName =="Terminate"){
-					// do nothing since should be the last line in the program
+					sem_post( &spoolMutex);
 
+				}else if(fcnName =="Terminate"){
+					// exit since should be the last line in the program
+					infile.close();
+//					pthread_exit(NULL);
 				}
 			}
 		}
@@ -174,10 +206,14 @@ void *Processor( void * arg){
 }
 
 void *Printer( void *){
+	sem_wait(&spoolerReady);
 	return NULL;
 }
 
 void *Spooler( void *){
+	sem_wait(&jobsAvailable);
+
+	sem_post(&spoolerReady);
 	return NULL;
 }
 
