@@ -49,6 +49,9 @@ using std::vector;
 #include <map>
 using std::map;
 
+#include <queue>
+using std::queue;
+
 #include <cstdlib> // atoi(), exit()
 using std::atoi;
 
@@ -64,15 +67,31 @@ const int MAX_PROCESSOR_THREADS = 10;
 
 map< int, vector<string> > buffer;
 vector<string> printBuffer;
+queue< vector<string> > printQueue;
 
 pthread_mutex_t CS_lock;
+sem_t buffersFull[MAX_PROCESSOR_THREADS];
 sem_t spoolMutex;
 sem_t jobsAvailable;
 sem_t spoolerReady;
+int numTerminated = 0;
+int NUM_PROCESSOR_THREADS = 0;
 
 int main(int argc, char* argv[]){
+	// get the number of processors to spawn from the command line args
+	// parse input arguments
+	if (argc > 1){ // argc should be 2 for correct execution
+		NUM_PROCESSOR_THREADS = atoi(argv[1]);
+	}else{
+		NUM_PROCESSOR_THREADS = 10;
+	}
+
+#ifdef DEBUG
+	cout << "Number of processor threads requested = " << NUM_PROCESSOR_THREADS << endl;
+#endif
+
 	// local variables:
-	pthread_t tid[MAX_PROCESSOR_THREADS];
+	pthread_t *tid = new pthread_t(NUM_PROCESSOR_THREADS);
 	pthread_t spooler_tid;
 	pthread_t printer_tid;
 
@@ -80,6 +99,9 @@ int main(int argc, char* argv[]){
 	sem_init( &spoolMutex, 0, 1);
 	sem_init( &jobsAvailable, 0, 0);
 	sem_init( &spoolerReady, 0, 0);
+	for(int i = 0; i < NUM_PROCESSOR_THREADS; ++i){
+		sem_init(&buffersFull[i], 0, 0);
+	}
 
 	// create spooler thread, lock it to wait for available buffers to print
 	if( pthread_create(&spooler_tid, NULL, Spooler, NULL) != 0 ){
@@ -92,15 +114,17 @@ int main(int argc, char* argv[]){
 	}
 
 	// process commands for all Programs
-	for(int i = 1; i <= MAX_PROCESSOR_THREADS; ++i){
+	for(int i = 1; i <= NUM_PROCESSOR_THREADS; ++i){
 		// here's where the magic (synchronization) happens
 		if( pthread_create(&tid[i], NULL, Processor, (void*) i) != 0 ){
 			printf( "Error: unable to create processor thread\n" );
 		}
 	}
 
-	for(int i = 1; i <= MAX_PROCESSOR_THREADS; ++i)
+	for(int i = 1; i <= NUM_PROCESSOR_THREADS; ++i)
 		pthread_join( tid[ i ], NULL );
+	// join spooler
+	// join printer
 
 	printf ( "\nmain() terminating\n" );
 
@@ -160,6 +184,7 @@ void *Processor( void * arg){
 				if(fcnName == "NewJob"){
 					// clear the buffer
 					localBuffer.clear();
+					// maybe wait until buffer is ready
 				}else if(fcnName == "Compute"){
 					// compute factorial of fcnArg
 					int N = atoi(fcnArg.c_str());
@@ -173,13 +198,15 @@ void *Processor( void * arg){
 					// buffer print args
 					localBuffer.push_back(fcnArg);
 				}else if(fcnName == "EndJob"){
-					// send buffer to spooler
+					// send buffer to spooler/ signal spooler
 					// only if last print job from this processor is done
 					// sem wait on spooler
 					sem_wait( &spoolMutex);
 						// send buffer to spooler
 						buffer[intID] = localBuffer;
-						// signal spooler that buffer is ready to print
+						// signal spooler that buffer is this processor has a job ready to print
+						sem_post(&buffersFull[intID]);
+						// signal buffer that ANY processor has a job available
 						sem_post(&jobsAvailable);
 					// sem post on return
 					sem_post( &spoolMutex);
@@ -187,6 +214,15 @@ void *Processor( void * arg){
 				}else if(fcnName =="Terminate"){
 					// exit since should be the last line in the program
 					infile.close();
+
+					pthread_mutex_lock( &CS_lock);
+					/* this is the CS where Processor threads will send their
+					 * output to the Spooler thread */
+						cout << "\nProcessor Thread number " << intID;
+						cout << message.str();
+						cout << endl;
+						cout.flush();
+					pthread_mutex_unlock( &CS_lock);
 //					pthread_exit(NULL);
 				}
 			}
@@ -194,14 +230,6 @@ void *Processor( void * arg){
 		infile.close();
 	}
 
-	pthread_mutex_lock( &CS_lock);
-	/* this is the CS where Processor threads will send their
-	 * output to the Spooler thread */
-		cout << "\nProcessor Thread number " << intID;
-		cout << message.str();
-		cout << endl;
-		cout.flush();
-	pthread_mutex_unlock( &CS_lock);
 	return NULL;
 }
 
@@ -212,6 +240,13 @@ void *Printer( void *){
 
 void *Spooler( void *){
 	sem_wait(&jobsAvailable);
+	for(int i = 0; i < MAX_PROCESSOR_THREADS; ++i){
+
+	}
+// wait for a job to be available ( jobsAvailable )
+
+	// while jobsAvailable
+
 
 	sem_post(&spoolerReady);
 	return NULL;
