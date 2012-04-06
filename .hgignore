@@ -4,5 +4,7 @@ syntax: glob
 spooler
 a.out
 *.o
+*Debug*
+*mk
 
 
