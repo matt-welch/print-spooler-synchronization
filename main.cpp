@@ -143,12 +143,13 @@ int main(int argc, char* argv[]){
 	// join printer
 	pthread_join(printer_tid, NULL);
 
+#ifdef DEBUG
 	printf ( "\nmain() terminating\n" );
 
 	cout << "num Jobs spooled: " << numJobsSpooled << endl;
 	cout << "num Jobs senttoPrint: " << numJobsSentToPrint << endl;
 	cout << "num Jobs printed: " << numJobsPrinted << endl;
-
+#endif
 	cout.flush();
 	cout << endl;
 	// program's done
@@ -237,7 +238,9 @@ void *Processor( void * arg){
 						pthread_mutex_lock(&lock_spoolerQueue);
 							// send localBuffer to global buffer
 							spoolerQueue.push(localBuffer.str());
+#ifdef DEBUG
 							printf("---Job spooled---%s---endjobspool---\n",localBuffer.str().c_str());
+#endif
 							numJobsSpooled++;
 							// sem post on return
 						pthread_mutex_unlock(&lock_spoolerQueue);
@@ -260,8 +263,10 @@ void *Processor( void * arg){
 					// post jobs available in case no jobs with printing occurred
 					sem_post(&jobsAvailable);
 //					pthread_exit(NULL);
+#ifdef DEBUG
 					printf("Processor %d terminating...\n",intTID);
-				}
+#endif
+					}
 			}
 		}
 		infile.close();
@@ -283,7 +288,7 @@ void *Spooler( void *){
 		numJobsLeft = spoolerQueue.size();
 	pthread_mutex_unlock( &lock_spoolerQueue);
 
-	while(deadCount < threadCount || numJobsLeft > 0){
+	while(deadCount < threadCount || numJobsSentToPrint < numJobsSpooled){
 		message.str("");
 		stuffToPrint = false;
 		pthread_mutex_lock(&lock_spoolerQueue);
@@ -314,7 +319,9 @@ void *Spooler( void *){
 	}
 	// post to printsAvailable in case no printing jobs occurred to release printer
 	sem_post( &printsAvailable);
+#ifdef DEBUG
 	printf("Spooler terminating...\n");
+#endif
 	return NULL;
 }
 
@@ -330,17 +337,16 @@ void *Printer( void *){
 	pthread_mutex_unlock( &lock_printerQueue);
 
 
-	while(deadCount < threadCount || numPrintsLeft > 0){
+	while(deadCount < threadCount || numJobsPrinted < numJobsSpooled){
 		// keep popping jobs off the front of the queue until there are none
 		pthread_mutex_lock( &lock_printerQueue );
 			numPrintsLeft = printerQueue.size();
 			if(numPrintsLeft > 0){
 				output = printerQueue.front();
 				printerQueue.pop();
-				numJobsPrinted++;
 				cout << output;
 				cout.flush();
-				output = "";
+				numJobsPrinted++;
 			}
 		pthread_mutex_unlock( &lock_printerQueue );
 
@@ -348,7 +354,9 @@ void *Printer( void *){
 			deadCount = numTerminated;
 		pthread_mutex_unlock( &lock_numTerm_count);
 	}
+#ifdef DEBUG
 	printf("Printer terminating...\n");
+#endif
 	return NULL;
 }
 
