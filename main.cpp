@@ -59,7 +59,6 @@ typedef string Instruction;
 typedef vector<Instruction> Program;
 
 // local function declarations
-map<int, Program> readProgramSource();
 void * Processor(void *);
 void * Printer(void *);
 void * Spooler(void *);
@@ -358,46 +357,4 @@ void *Printer( void *){
 	printf("Printer terminating...\n");
 #endif
 	return NULL;
-}
-
-map<int, Program> readProgramSource(void){
-	ifstream infile;
-	Instruction expression;
-	stringstream inFileNameStream;
-	string inFileName;
-	map<int, Program> TaskSet;
-
-	for(int i = 1; i <= NUM_PROCESSOR_THREADS; ++i){
-		// build filename: multiple files of form "progi.txt"
-		inFileNameStream << "../input/prog" << i << ".txt";
-		inFileName = inFileNameStream.str();
-
-		// Open pseudo-program file for reading
-		infile.open((char*)inFileName.c_str());
-
-		if(infile.fail()){
-			cout << endl <<"No program matching \"" << inFileName <<
-					"\" exists." << endl;
-		}else{
-			// read the pseudocode programs from the files available
-#ifdef DEBUG
-			cout << endl << "PrintSpooler: Program " << i << ": \""
-					<< inFileName << "\":::" << endl;
-#endif
-			Program currentProgram;
-			while(infile.good()){
-				getline(infile, expression);
-				if(expression != ""){
-					currentProgram.push_back(expression);
-#ifdef DEBUG
-					cout << expression << endl;
-#endif
-				}
-			}
-			infile.close();
-			TaskSet[i] = currentProgram;
-		}
-		inFileNameStream.str("");
-	}
-	return TaskSet;
 }
