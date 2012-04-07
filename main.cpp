@@ -65,17 +65,29 @@ void * Printer(void *);
 void * Spooler(void *);
 const int MAX_PROCESSOR_THREADS = 10;
 
-map< int, vector<string> > buffer;
-vector<string> printBuffer;
-queue< vector<string> > printQueue;
+map< int, vector< string > > buffer;  // needs a mutex
+vector< string > printBuffer;  // needs a mutex
 
-pthread_mutex_t CS_lock;
-sem_t buffersFull[MAX_PROCESSOR_THREADS];
-sem_t spoolMutex;
+queue< string > printerQueue;
+sem_t printerQueueBusy;
+
+queue< string > spoolerQueue;
+sem_t spoolerQueueBusy;
+
+pthread_mutex_t lock_numTerm_count; // lock mutex for preventing access to buffer
+pthread_mutex_t lock_spoolerQueue;
+pthread_mutex_t lock_printerQueue;
+
+sem_t buffersFull[MAX_PROCESSOR_THREADS];  // semaphore to tell spooler that jobs are available
+
 sem_t jobsAvailable;
-sem_t spoolerReady;
-int numTerminated = 0;
+sem_t printsAvailable;
+
+int numTerminated = 0; // needs a mutex
 int NUM_PROCESSOR_THREADS = 0;
+int numJobsSpooled = 0;
+int numJobsSentToPrint = 0;
+int numJobsPrinted = 0;
 
 int main(int argc, char* argv[]){
 	// get the number of processors to spawn from the command line args
@@ -83,22 +95,24 @@ int main(int argc, char* argv[]){
 	if (argc > 1){ // argc should be 2 for correct execution
 		NUM_PROCESSOR_THREADS = atoi(argv[1]);
 	}else{
-		NUM_PROCESSOR_THREADS = 10;
+		NUM_PROCESSOR_THREADS = 1;
 	}
 
 #ifdef DEBUG
 	cout << "Number of processor threads requested = " << NUM_PROCESSOR_THREADS << endl;
 #endif
 
-	// local variables:
+	// create thread handles
 	pthread_t *tid = new pthread_t(NUM_PROCESSOR_THREADS);
 	pthread_t spooler_tid;
 	pthread_t printer_tid;
 
 	// initialize mutex & semaphores
-	sem_init( &spoolMutex, 0, 1);
 	sem_init( &jobsAvailable, 0, 0);
-	sem_init( &spoolerReady, 0, 0);
+	sem_init( &printsAvailable, 0, 0);
+
+	sem_init( &spoolerQueueBusy, 0, 1);
+	sem_init( &printerQueueBusy, 0, 0);
 	for(int i = 0; i < NUM_PROCESSOR_THREADS; ++i){
 		sem_init(&buffersFull[i], 0, 0);
 	}
@@ -121,12 +135,19 @@ int main(int argc, char* argv[]){
 		}
 	}
 
+	// processor go off and work through their jobs then join when they're done
 	for(int i = 1; i <= NUM_PROCESSOR_THREADS; ++i)
 		pthread_join( tid[ i ], NULL );
 	// join spooler
+	pthread_join(spooler_tid, NULL);
 	// join printer
+	pthread_join(printer_tid, NULL);
 
 	printf ( "\nmain() terminating\n" );
+
+	cout << "num Jobs spooled: " << numJobsSpooled << endl;
+	cout << "num Jobs senttoPrint: " << numJobsSentToPrint << endl;
+	cout << "num Jobs printed: " << numJobsPrinted << endl;
 
 	cout.flush();
 	cout << endl;
@@ -136,29 +157,33 @@ int main(int argc, char* argv[]){
 
 void *Processor( void * arg){
 	int *id = (int*)&arg;
-	int intID = *id;
-	/*-----------------------------------------------------------*/
+	int intTID = *id;
 	ifstream infile;
 	stringstream inFileNameStream, message;
 	string inFileName;
 	Program currentProgram;
-	vector<string> localBuffer;
+	stringstream localBuffer;
+	bool stuffToPrint = false;
 
 	// build filename: multiple files of form "progi.txt"
-	inFileNameStream << "../input/prog" << intID << ".txt";
+	inFileNameStream << "../input/prog" << intTID << ".txt";
 	inFileName = inFileNameStream.str();
 
 	// Open pseudo-program file for reading
 	infile.open((char*)inFileName.c_str());
 
 	if(infile.fail()){
-		message << "\nNo program matching \"" << inFileName <<
-				"\" exists.\n";
+		cout << "\nNo program matching \"" << inFileName <<
+				"\" exists.  Thread terminating...\n";
+		cout.flush();
+		pthread_cancel(intTID);
 	}else{
 		// read the pseudocode programs from the files available
+
 #ifdef DEBUG
-		message << "\nPrintSpooler: Program " << intID << ": \""
+		message << "\nProcessor Thread: Program " << intTID << ": \""
 				<< inFileName << "\":::\n";
+		cout << message.str();
 #endif
 		string expression;
 		while(infile.good()){
@@ -170,11 +195,7 @@ void *Processor( void * arg){
 			if(expression != ""){
 				// put expression into a stringstream for token extraction
 				exprTokens << expression;
-#ifdef DEBUG
-	#ifdef VERBOSE
-				message << expression << endl;
-	#endif
-#endif
+
 				// extract tokens (assume always only two per line)
 				exprTokens >> fcnName;
 				exprTokens >> fcnArg;
@@ -182,12 +203,18 @@ void *Processor( void * arg){
 					message << "+" << fcnName << "(" << fcnArg << ")\n";
 #endif
 				if(fcnName == "NewJob"){
+					// reset stuffToPrint to false since it's a new job and we don't know what's coming
+					stuffToPrint = false;
+
 					// clear the buffer
-					localBuffer.clear();
-					// maybe wait until buffer is ready
+					localBuffer.str("");
+
+					// add string to the message describing the job output
+					localBuffer << "\nP" << intTID << "::Job " << fcnArg << "::" << endl;
 				}else if(fcnName == "Compute"){
 					// compute factorial of fcnArg
-					int N = atoi(fcnArg.c_str());
+					// TODO FIX computes are N*2 to spread things apart
+					int N = atoi(fcnArg.c_str()) * 2;
 					int product = 1;
 					for(int i = N; i > 1; --i)
 						product = product * i;
@@ -195,60 +222,133 @@ void *Processor( void * arg){
 					message << "\t" << N << "! = " << product << endl;
 #endif
 				}else if(fcnName == "Print"){
+//					printf("I found a print argument:%s\n",fcnArg.c_str());
 					// buffer print args
-					localBuffer.push_back(fcnArg);
+					localBuffer << fcnArg << endl;
+					stuffToPrint = true;
 				}else if(fcnName == "EndJob"){
 					// send buffer to spooler/ signal spooler
 					// only if last print job from this processor is done
-					// sem wait on spooler
-					sem_wait( &spoolMutex);
-						// send buffer to spooler
-						buffer[intID] = localBuffer;
-						// signal spooler that buffer is this processor has a job ready to print
-						sem_post(&buffersFull[intID]);
-						// signal buffer that ANY processor has a job available
-						sem_post(&jobsAvailable);
-					// sem post on return
-					sem_post( &spoolMutex);
+					if(stuffToPrint){
+						/* this is the CS where Processor threads will send their
+						 * output to the Spooler thread */
 
+						// sem wait on spooler
+						pthread_mutex_lock(&lock_spoolerQueue);
+							// send localBuffer to global buffer
+							spoolerQueue.push(localBuffer.str());
+							printf("---Job spooled---%s---endjobspool---\n",localBuffer.str().c_str());
+							numJobsSpooled++;
+							// sem post on return
+						pthread_mutex_unlock(&lock_spoolerQueue);
+
+						// signal spooler that ANY processor has a job available so it may begin
+						sem_post(&jobsAvailable);
+					}
+
+					// reset stuffToPrint
+					stuffToPrint = false;
 				}else if(fcnName =="Terminate"){
 					// exit since should be the last line in the program
 					infile.close();
 
-					pthread_mutex_lock( &CS_lock);
-					/* this is the CS where Processor threads will send their
-					 * output to the Spooler thread */
-						cout << "\nProcessor Thread number " << intID;
-						cout << message.str();
-						cout << endl;
-						cout.flush();
-					pthread_mutex_unlock( &CS_lock);
+					pthread_mutex_lock( &lock_numTerm_count);
+						// increment number of terminated threads
+						numTerminated++;
+					pthread_mutex_unlock( &lock_numTerm_count);
+
+					// post jobs available in case no jobs with printing occurred
+					sem_post(&jobsAvailable);
 //					pthread_exit(NULL);
+					printf("Processor %d terminating...\n",intTID);
 				}
 			}
 		}
 		infile.close();
 	}
-
-	return NULL;
-}
-
-void *Printer( void *){
-	sem_wait(&spoolerReady);
 	return NULL;
 }
 
 void *Spooler( void *){
+	// wait for a job to be available ( jobsAvailable )
+	int threadCount = NUM_PROCESSOR_THREADS;
+	int deadCount = 0;
+	int numJobsLeft = 0;
+	string job;
+	stringstream message;
+	bool stuffToPrint = false;
+
 	sem_wait(&jobsAvailable);
-	for(int i = 0; i < MAX_PROCESSOR_THREADS; ++i){
+	pthread_mutex_lock(&lock_spoolerQueue);
+		numJobsLeft = spoolerQueue.size();
+	pthread_mutex_unlock( &lock_spoolerQueue);
 
+	while(deadCount < threadCount || numJobsLeft > 0){
+		message.str("");
+		stuffToPrint = false;
+		pthread_mutex_lock(&lock_spoolerQueue);
+			numJobsLeft = spoolerQueue.size();
+
+			if(numJobsLeft > 0){
+				job = spoolerQueue.front();
+				spoolerQueue.pop();
+				stuffToPrint = true;
+			}
+		pthread_mutex_unlock(&lock_spoolerQueue);
+
+		if(stuffToPrint){
+			pthread_mutex_lock( &lock_printerQueue);
+				printerQueue.push(job);
+				numJobsSentToPrint++;
+			pthread_mutex_unlock( &lock_printerQueue);
+#ifdef DEBUG
+			message << "SPOOLER job:: \n" << job;
+			cout << message.str();
+#endif
+			sem_post(&printsAvailable);
+		}
+
+		pthread_mutex_lock( &lock_numTerm_count);
+			deadCount = numTerminated;
+		pthread_mutex_unlock( &lock_numTerm_count);
 	}
-// wait for a job to be available ( jobsAvailable )
+	// post to printsAvailable in case no printing jobs occurred to release printer
+	sem_post( &printsAvailable);
+	printf("Spooler terminating...\n");
+	return NULL;
+}
 
-	// while jobsAvailable
+void *Printer( void *){
+	int threadCount = NUM_PROCESSOR_THREADS;
+	string output;
+	int deadCount = 0;
+	int numPrintsLeft = 0;
+	// repeat while all processor threads have not terminated
+
+	pthread_mutex_lock(&lock_printerQueue);
+		numPrintsLeft = printerQueue.size();
+	pthread_mutex_unlock( &lock_printerQueue);
 
 
-	sem_post(&spoolerReady);
+	while(deadCount < threadCount || numPrintsLeft > 0){
+		// keep popping jobs off the front of the queue until there are none
+		pthread_mutex_lock( &lock_printerQueue );
+			numPrintsLeft = printerQueue.size();
+			if(numPrintsLeft > 0){
+				output = printerQueue.front();
+				printerQueue.pop();
+				numJobsPrinted++;
+				cout << output;
+				cout.flush();
+				output = "";
+			}
+		pthread_mutex_unlock( &lock_printerQueue );
+
+		pthread_mutex_lock( &lock_numTerm_count);
+			deadCount = numTerminated;
+		pthread_mutex_unlock( &lock_numTerm_count);
+	}
+	printf("Printer terminating...\n");
 	return NULL;
 }
 
@@ -258,9 +358,8 @@ map<int, Program> readProgramSource(void){
 	stringstream inFileNameStream;
 	string inFileName;
 	map<int, Program> TaskSet;
-	const int MAX_PROGRAMS = 10;
 
-	for(int i = 1; i <= MAX_PROGRAMS; ++i){
+	for(int i = 1; i <= NUM_PROCESSOR_THREADS; ++i){
 		// build filename: multiple files of form "progi.txt"
 		inFileNameStream << "../input/prog" << i << ".txt";
 		inFileName = inFileNameStream.str();
@@ -273,8 +372,10 @@ map<int, Program> readProgramSource(void){
 					"\" exists." << endl;
 		}else{
 			// read the pseudocode programs from the files available
+#ifdef DEBUG
 			cout << endl << "PrintSpooler: Program " << i << ": \""
 					<< inFileName << "\":::" << endl;
+#endif
 			Program currentProgram;
 			while(infile.good()){
 				getline(infile, expression);
