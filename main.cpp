@@ -55,6 +55,9 @@ using std::queue;
 #include <cstdlib> // atoi(), exit()
 using std::atoi;
 
+#include <sys/time.h>
+using namespace std;
+
 typedef string Instruction;
 typedef vector<Instruction> Program;
 
@@ -164,6 +167,12 @@ void *Processor( void * arg){
 	Program currentProgram;
 	stringstream localBuffer;
 	bool stuffToPrint = false;
+	// TODO FIX computes are N*2 to spread things apart
+	const int slowdownFactor = 1;
+
+	// variables to hold program etime
+	struct timeval start, end;
+	long seconds, useconds;
 
 	// build filename: multiple files of form "progi.txt"
 	inFileNameStream << "../input/prog" << intTID << ".txt";
@@ -206,6 +215,9 @@ void *Processor( void * arg){
 					// reset stuffToPrint to false since it's a new job and we don't know what's coming
 					stuffToPrint = false;
 
+					// start timer
+					gettimeofday(&start, NULL);
+
 					// clear the buffer
 					localBuffer.str("");
 
@@ -213,8 +225,7 @@ void *Processor( void * arg){
 					localBuffer << "\nP" << intTID << "::Job " << fcnArg << "::" << endl;
 				}else if(fcnName == "Compute"){
 					// compute factorial of fcnArg
-					// TODO FIX computes are N*2 to spread things apart
-					int N = atoi(fcnArg.c_str()) * 2;
+					int N = atoi(fcnArg.c_str()) * slowdownFactor;
 					int product = 1;
 					for(int i = N; i > 1; --i)
 						product = product * i;
@@ -230,6 +241,16 @@ void *Processor( void * arg){
 					// send buffer to spooler/ signal spooler
 					// only if last print job from this processor is done
 					if(stuffToPrint){
+						// if debug mode, append elapsed time to the output
+
+						// print program elapsed time
+						gettimeofday(&end, NULL);
+						seconds  = end.tv_sec  - start.tv_sec;
+						useconds = end.tv_usec - start.tv_usec;
+						double preciseTime = seconds + useconds/1000000.0;
+
+						localBuffer << "[etime: " << preciseTime << " s]\n" ;
+
 						/* this is the CS where Processor threads will send their
 						 * output to the Spooler thread */
 
