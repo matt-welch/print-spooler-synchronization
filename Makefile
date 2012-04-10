@@ -1,17 +1,14 @@
-spooler: main.o
-	g++ main.o -o spooler $(CONFIG)
+spooler: main.cpp
+	g++ main.cpp -o spooler $(CONFIG) -lpthread
 
-main.o: main.cpp
-	g++ -c main.cpp -o main.o $(CONFIG)
-	
 clean:
 	rm -f spooler *.o core core.*
 
 tidy: clean
 	rm -f *.*~ *~
 
-DEBUG_FLAGS = -g3 -ggdb -O0 -Wall -pedantic -DDEBUG -lpthread
-CONFIG		= -Wall -pedantic -lpthread
+DEBUG_FLAGS = -g3 -ggdb -O0 -Wall -pedantic -DDEBUG
+CONFIG		= -Wall -pedantic
 EASY_FLAGS	= 
 
 debug: CONFIG=$(DEBUG_FLAGS)
@@ -22,4 +19,3 @@ easy: spooler
 
 test: debug
 	./spooler
-	

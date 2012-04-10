@@ -46,9 +46,6 @@ using std::stringstream;
 #include <vector>
 using std::vector;
 
-#include <map>
-using std::map;
-
 #include <queue>
 using std::queue;
 
@@ -57,9 +54,6 @@ using std::atoi;
 
 #include <sys/time.h>
 using namespace std;
-
-typedef string Instruction;
-typedef vector<Instruction> Program;
 
 // local function declarations
 void * Processor(void *);
@@ -104,14 +98,13 @@ int main(int argc, char* argv[]){
 		pthread_mutex_unlock( &g_lock_threadcount );
 	}
 
-
 #ifdef DEBUG
 	cout << "Number of processor threads requested = " << g_NUM_PROCESSOR_THREADS << endl;
 #endif
 
 	// create thread handles
 	pthread_mutex_lock(   &g_lock_threadcount );
-		pthread_t *tid = new pthread_t(g_NUM_PROCESSOR_THREADS);
+		pthread_t tid[g_MAX_PROCESSOR_THREADS];
 	pthread_mutex_unlock( &g_lock_threadcount );
 
 	pthread_t spooler_tid;
@@ -165,6 +158,7 @@ int main(int argc, char* argv[]){
 	cout << "num Jobs senttoPrint: " << g_numJobsSentToPrint << endl;
 	cout << "num Jobs printed: " << g_numJobsPrinted << endl;
 #endif
+
 	cout.flush();
 	cout << endl;
 	// program's done
@@ -174,10 +168,10 @@ int main(int argc, char* argv[]){
 void *Processor( void * arg){
 	int *id = (int*)&arg;
 	int intTID = *id;
+
 	ifstream infile;
 	stringstream inFileNameStream, message;
 	string inFileName;
-	Program currentProgram;
 	stringstream localBuffer;
 	bool stuffToPrint = false;
 
@@ -236,7 +230,7 @@ void *Processor( void * arg){
 					localBuffer.str("");
 
 					// add string to the message describing the job output
-					localBuffer << "\nP" << intTID << "::Job " << fcnArg << "::" << endl;
+					localBuffer << "\nProcess " << intTID << ", Job " << fcnArg << ":" << endl;
 				}else if(fcnName == "Compute"){
 					// compute factorial of fcnArg
 					int N = atoi(fcnArg.c_str()) * slowdownFactor;
@@ -345,7 +339,7 @@ void *Spooler( void *){
 #ifdef DEBUG
 		// slow down the spooler output when processes are done
 		if(deadCount == threadCount)
-			sleep(1);
+			usleep(500);
 #endif
 
 		pthread_mutex_lock(   &g_lock_spoolerQueue);
@@ -405,7 +399,7 @@ void *Printer( void *){
 	int numPrintsLeft = 0;
 
 	// create local copies of the counter variables
-	int localNumJobsSentToPrint, localNumJobsSpooled, local_numJobsPrinted;
+	int localNumJobsSpooled, local_numJobsPrinted;
 
 	sem_wait(&g_printsAvailable);
 #ifdef DEBUG
@@ -415,10 +409,6 @@ void *Printer( void *){
 	pthread_mutex_lock(   &g_lock_printerQueue);
 		numPrintsLeft = g_printerQueue.size();
 	pthread_mutex_unlock( &g_lock_printerQueue);
-
-	pthread_mutex_lock(   &g_lock_numJobsSentToPrint);
-		localNumJobsSentToPrint = g_numJobsSentToPrint;
-	pthread_mutex_unlock( &g_lock_numJobsSentToPrint);
 
 	pthread_mutex_lock(    &g_lock_spoolerQueue);
 		localNumJobsSpooled = g_numJobsSpooled;
@@ -438,7 +428,7 @@ void *Printer( void *){
 #ifdef DEBUG
 		// slow down the printer output when processes are done
 		if(deadCount == threadCount)
-			sleep(1);
+			usleep(500);
 #endif
 
 		pthread_mutex_lock(   &g_lock_printerQueue );
@@ -452,10 +442,6 @@ void *Printer( void *){
 				local_numJobsPrinted = g_numJobsPrinted;
 			}
 		pthread_mutex_unlock( &g_lock_printerQueue );
-
-		pthread_mutex_lock(   &g_lock_numJobsSentToPrint);
-			localNumJobsSentToPrint = g_numJobsSentToPrint;
-		pthread_mutex_unlock( &g_lock_numJobsSentToPrint);
 
 		//printf(" PRINTER waiting on g_lock_numTerm_count\n");
 		pthread_mutex_lock(   &g_lock_numTerm_count);
