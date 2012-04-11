@@ -1,9 +1,6 @@
-spooler: main.o
-	g++ main.o -o spooler $(CONFIG)
+spooler: main.cpp
+	g++ main.cpp -o spooler $(CONFIG)
 
-main.o: main.cpp
-	g++ -c main.cpp -o main.o $(CONFIG)
-	
 clean:
 	rm -f spooler *.o core core.*
 
