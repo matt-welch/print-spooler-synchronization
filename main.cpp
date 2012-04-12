@@ -106,6 +106,50 @@ int g_NUM_PROCESSOR_THREADS = 10;
 
 pthread_mutex_t g_lock_file_access = PTHREAD_MUTEX_INITIALIZER;
 
+queue<string>* parseProgram(int i){
+	queue<string> * program = new queue<string>;
+	// build filename: multiple files of form "progi.txt"
+
+	ifstream infile;
+	stringstream inFileNameStream, message;
+	string inFileName;
+
+	inFileNameStream << "prog" << i << ".txt";
+	inFileName = inFileNameStream.str();
+
+	// Open pseudo-program file for reading
+	const char* cString = inFileName.c_str();
+#ifdef DEBUG
+	printf("parseProgram(%d)::About to open file \"%s\"\n",i, cString);
+#endif
+	pthread_mutex_lock(&g_lock_file_access);
+		infile.open(cString);
+	pthread_mutex_unlock(&g_lock_file_access);
+
+	if(infile.fail()){
+		cout << "\nNo program matching \"" << inFileName <<
+				"\" exists.  Thread terminating...\n";
+		cout.flush();
+		//		pthread_cancel(pthread_self());
+		program = NULL;
+	}else{
+		// read the pseudocode programs from the files available
+#ifdef DEBUG
+		message << "\nProcessor Thread: Program " << i << ": \""
+				<< inFileName << "\":::\n";
+		cout << message.str();
+#endif
+		string expression;
+		while(infile.good()){
+			// get next line from the program
+			getline(infile, expression);
+			program->push(expression);
+		}
+		infile.close();
+	}
+	return program;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 int main(int argc, char* argv[]){
 	// get the number of processors to spawn from the command line args
@@ -168,10 +212,9 @@ int main(int argc, char* argv[]){
 
 	// process commands for all Programs
 	for(int i = 1; i <= numThreads; ++i){
-//		thread_parameters* temp = new thread_parameters();
-//		temp->tid = i;
+		queue<string> * program = parseProgram(i);
 		// here's where the magic (synchronization) happens
-		int code = pthread_create(&tid[i], NULL, Processor, NULL);
+		int code = pthread_create(&tid[i], NULL, Processor, (void*)program);
 		if( code != 0 ){
 			printf( "Error: unable to create processor thread\n" );
 		}
@@ -214,6 +257,8 @@ void *Processor( void * arg){
 //	thread_parameters* params = (thread_parameters*)arg;
 //	intTID = params->tid;
 
+	queue<string> * program = (queue<string>*)arg;
+
 	pthread_mutex_lock(&g_lock_numJobs);
 		g_numJobs.started++;
 		intTID = g_numJobs.started;
@@ -249,6 +294,7 @@ void *Processor( void * arg){
 		infile.open(cString);
 	pthread_mutex_unlock(&g_lock_file_access);
 
+/*
 	if(infile.fail()){
 		cout << "\nNo program matching \"" << inFileName <<
 				"\" exists.  Thread terminating...\n";
@@ -269,11 +315,16 @@ void *Processor( void * arg){
 			program.push(expression);
 		}
 		infile.close();
-
+*/
+	if(program == NULL){
+		cout << "\nUnable to parse program.  Thread terminating...\n";
+				cout.flush();
+	}else{
+		string expression;
 		// parse expressions for instructions
-		while(!program.empty()){
-			expression = program.front();
-			program.pop();
+		while(!program->empty()){
+			expression = program->front();
+			program->pop();
 			// clear exprTokens, token
 			string fcnName, fcnArg;
 			stringstream exprTokens;
