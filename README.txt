@@ -22,6 +22,18 @@ threads: one for each processor, one for the PRINTER, one for the SPOOLER.
 Each thread simulating a PROCESSOR Pi, 1<=i<=n, executes a pseudo-program
 found in the file "progi.txt", consisting of a sequence of commands.
 
-INSTRUCTIONS FOR USE: 
-After unzipping the files, compile the program with the "make" command.  
-Run the program with the ./spooler command.  
+ASSUMPTIONS ABOUT RUNTIME ENVIRONMENT: 
+1) pthreads library is available in g++ through -lpthread flag
+2) program files "progi.txt" are present in the local directory
+2a)	instructions and arguments will be space-delimited in each progi.txt
+
+COMPILATION INSTRUCTIONS: 
+	After unzipping the files in a local directory, compile the program 
+with the "make" command to build the default target with g++ flags: 
+	-Wall -pedantic -lpthread -O0
+	
+EXECUTION INSTRUCTIONS:
+	Run the program with the command: "./spooler N", where N is the number 
+of processor threads desired (between 1 and 10).
+
+ 
