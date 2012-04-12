@@ -1,0 +1,13 @@
+NewJob 1
+Compute 3
+Compute 6
+Compute 4
+EndJob
+
+NewJob 2
+Print P3J2-L1
+Print P3J2-L2
+Print P3J2-L3
+EndJob
+
+Terminate

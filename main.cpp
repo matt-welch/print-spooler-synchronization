@@ -59,6 +59,7 @@ using namespace std;
 void * Processor(void *);
 void * Printer(void *);
 void * Spooler(void *);
+int factorial(int number);
 const int g_MAX_PROCESSOR_THREADS = 10;
 
 typedef struct _thread_parameters{
@@ -103,6 +104,9 @@ numJobs g_numJobs;
 pthread_mutex_t g_lock_NUM_PROCESSOR_THREADS;
 int g_NUM_PROCESSOR_THREADS = 10;
 
+pthread_mutex_t g_lock_file_access = PTHREAD_MUTEX_INITIALIZER;
+
+////////////////////////////////////////////////////////////////////////////////
 int main(int argc, char* argv[]){
 	// get the number of processors to spawn from the command line args
 	// parse input arguments
@@ -164,10 +168,11 @@ int main(int argc, char* argv[]){
 
 	// process commands for all Programs
 	for(int i = 1; i <= numThreads; ++i){
-		thread_parameters* temp = new thread_parameters();
-		temp->tid = i;
+//		thread_parameters* temp = new thread_parameters();
+//		temp->tid = i;
 		// here's where the magic (synchronization) happens
-		if( pthread_create(&tid[i], NULL, Processor, (void*) temp) != 0 ){
+		int code = pthread_create(&tid[i], NULL, Processor, NULL);
+		if( code != 0 ){
 			printf( "Error: unable to create processor thread\n" );
 		}
 	}
@@ -175,22 +180,22 @@ int main(int argc, char* argv[]){
 	// processor go off and work through their jobs then join when they're done
 	for(int i = 1; i <= numThreads; ++i)
 		pthread_join( tid[ i ], NULL );
-#if 1
+#ifdef DEBUG
 	printf("MAIN::Processor threads joined\n");
 #endif
 
 	// join spooler
 	pthread_join(spooler_tid, NULL);
-#if 1
+#ifdef DEBUG
 	printf("MAIN::Spooler thread joined\n");
 #endif
 	// join printer
 	pthread_join(printer_tid, NULL);
-#if 1
+#ifdef DEBUG
 	printf("MAIN::Printer thread joined\n");
 #endif
 
-#if 1
+#ifdef DEBUG
 	printf ( "\nmain() terminating\n" );
 	cout << "num Jobs spooled: " << g_numJobs.spooled << endl;
 	cout << "num Jobs senttoPrint: " << g_numJobs.sentToPrint<< endl;
@@ -205,8 +210,16 @@ int main(int argc, char* argv[]){
 
 ////////////////////////////////////////////////////////////////////////////////
 void *Processor( void * arg){
-	thread_parameters* params = (thread_parameters*)arg;
-	int intTID = params->tid;
+	int intTID;
+//	thread_parameters* params = (thread_parameters*)arg;
+//	intTID = params->tid;
+
+	pthread_mutex_lock(&g_lock_numJobs);
+		g_numJobs.started++;
+		intTID = g_numJobs.started;
+	pthread_mutex_unlock(&g_lock_numJobs);
+
+	printf("PROCESSOR: ID (%d) beginning...\n", intTID);
 
 	ifstream infile;
 	stringstream inFileNameStream, message;
@@ -215,7 +228,7 @@ void *Processor( void * arg){
 	bool stuffToPrint = false;
 
 	// computes may be increased to spread things apart (normal = 1)
-	const int slowdownFactor = 4;
+	const int slowdownFactor = 1;
 
 #ifdef DEBUG
 	// variables to hold program etime
@@ -224,36 +237,47 @@ void *Processor( void * arg){
 #endif
 
 	// build filename: multiple files of form "progi.txt"
-	inFileNameStream << "../input/prog" << intTID << ".txt";
+	inFileNameStream << "prog" << intTID << ".txt";
 	inFileName = inFileNameStream.str();
 
 	// Open pseudo-program file for reading
-	infile.open((char*)inFileName.c_str());
+	const char* cString = inFileName.c_str();
+#ifdef DEBUG
+	printf("PROCESSOR(%d)::About to open file \"%s\"\n",intTID, cString);
+#endif
+	pthread_mutex_lock(&g_lock_file_access);
+		infile.open(cString);
+	pthread_mutex_unlock(&g_lock_file_access);
 
 	if(infile.fail()){
 		cout << "\nNo program matching \"" << inFileName <<
 				"\" exists.  Thread terminating...\n";
 		cout.flush();
-		pthread_cancel(intTID);
+//		pthread_cancel(pthread_self());
 	}else{
 		// read the pseudocode programs from the files available
-
-		pthread_mutex_lock(&g_lock_numJobs);
-			g_numJobs.started++;
-		pthread_mutex_unlock(&g_lock_numJobs);
-
 #ifdef DEBUG
 		message << "\nProcessor Thread: Program " << intTID << ": \""
 				<< inFileName << "\":::\n";
 		cout << message.str();
 #endif
 		string expression;
+		queue<string> program;
 		while(infile.good()){
+			// get next line from the program
+			getline(infile, expression);
+			program.push(expression);
+		}
+		infile.close();
+
+		// parse expressions for instructions
+		while(!program.empty()){
+			expression = program.front();
+			program.pop();
 			// clear exprTokens, token
 			string fcnName, fcnArg;
 			stringstream exprTokens;
-			// get next line from the program
-			getline(infile, expression);
+
 			if(expression != ""){
 				// put expression into a stringstream for token extraction
 				exprTokens << expression;
@@ -262,8 +286,11 @@ void *Processor( void * arg){
 				exprTokens >> fcnName;
 				exprTokens >> fcnArg;
 #ifdef DEBUG
+	#ifdef VERBOSE
 					message << "+" << fcnName << "(" << fcnArg << ")\n";
+	#endif
 #endif
+
 				if(fcnName == "NewJob"){
 					// reset stuffToPrint to false since it's a new job and we don't know what's coming
 					stuffToPrint = false;
@@ -279,13 +306,14 @@ void *Processor( void * arg){
 				}else if(fcnName == "Compute"){
 					// compute factorial of fcnArg
 					int N = atoi(fcnArg.c_str()) * slowdownFactor;
-					int product = 1;
-					for(int i = N; i > 1; --i)
-						product = product * i;
+					int product = factorial(N);
+					product = product * 1;
 #ifdef DEBUG
+	#ifdef VERBOSE
 					message << "\t" << N << "! = " << product << endl;
+	#endif
 #endif
-				}else if(fcnName == "Print"){
+					}else if(fcnName == "Print"){
 					// buffer print args
 					localBuffer << fcnArg << endl;
 					stuffToPrint = true;
@@ -305,18 +333,19 @@ void *Processor( void * arg){
 #endif
 						/* this is the CS where Processor threads will send their
 						 * output to the Spooler thread */
-
+#ifdef DEBUG
 						printf("PROCESSOR(%d)::waiting on g_spoolerEmpty\n", intTID);
+#endif
 						// wait on available space in the spoolerbuffer
 						sem_wait( &g_spoolerEmpty );
-						// wait on spoolerQueue mutex
-						pthread_mutex_lock(   &g_lock_spoolerQueue);
-							// send localBuffer to global buffer
-							g_spoolerQueue.push(localBuffer.str());
-//							g_numJobsSpooled++;
-						pthread_mutex_lock( &g_lock_numJobs);
-							g_numJobs.spooled++;
-						pthread_mutex_unlock( &g_lock_numJobs);
+							// wait on spoolerQueue mutex
+							pthread_mutex_lock(   &g_lock_spoolerQueue);
+								// send localBuffer to global buffer
+								g_spoolerQueue.push(localBuffer.str());
+	//							g_numJobsSpooled++;
+							pthread_mutex_lock(   &g_lock_numJobs);
+								g_numJobs.spooled++;
+							pthread_mutex_unlock( &g_lock_numJobs);
 #ifdef DEBUG
 							printf("PROCESSOR::spoolerQueue size = %lu\n", g_spoolerQueue.size());
 
@@ -325,7 +354,7 @@ void *Processor( void * arg){
 	#endif
 #endif
 							// sem post on return
-						pthread_mutex_unlock( &g_lock_spoolerQueue);
+							pthread_mutex_unlock( &g_lock_spoolerQueue);
 
 						// signal an item has been produced
 						sem_post( &g_spoolerFull );
@@ -351,14 +380,14 @@ void *Processor( void * arg){
 
 					// post jobs available in case no jobs with printing occurred
 					sem_post(&g_jobsAvailable);
-
+#ifdef DEBUG
 					printf("PROCESOR:: (%d) terminating...\n",intTID);
-					}
+#endif
+				}
 			}
 		}
-		infile.close();
 	}
-	delete params;
+//	delete params;
 	sem_post(&g_spoolerFull);
 	return NULL;
 }
@@ -387,30 +416,36 @@ void *Spooler( void *){
 	while(true){
 		stuffToPrint = false;
 
+#ifdef DEBUG
 		printf("SPOOLER::waiting on g_spoolerFull\n");
+#endif
 		sem_wait( &g_spoolerFull);
 			pthread_mutex_lock(   &g_lock_spoolerQueue);
+#ifdef DEBUG
 			printf("SPOOLER::spoolerQueue size = %lu\n", g_spoolerQueue.size());
+#endif
 			if(g_spoolerQueue.size() > 0){
 				job = g_spoolerQueue.front();
 				g_spoolerQueue.pop();
 				stuffToPrint = true;
 				sem_post( &g_spoolerEmpty);
 			}else{
+#ifdef DEBUG
 				printf("SPOOLER::spooler should NOT be here!\n");
+#endif
 				stuffToPrint = false;
 			}
 			pthread_mutex_unlock( &g_lock_spoolerQueue);
 
 		// move string to printer queue
 		if(stuffToPrint){
+#ifdef DEBUG
 			printf("SPOOLER::waiting on g_printerEmpty\n");
+#endif
 			sem_wait( &g_printerEmpty);
 
 			pthread_mutex_lock(   &g_lock_printerQueue);
 				g_printerQueue.push(job);
-//				g_numJobsSentToPrint++;
-//				localNumJobsSentToPrint = g_numJobsSentToPrint;
 				pthread_mutex_lock( &g_lock_numJobs);
 					g_numJobs.sentToPrint++;
 				pthread_mutex_unlock( &g_lock_numJobs);
@@ -426,15 +461,17 @@ void *Spooler( void *){
 			spoolerJobs = g_numJobs;
 		pthread_mutex_unlock( &g_lock_numJobs);
 
+#ifdef DEBUG
 		printf("SPOOLER::Dead[%d], Spooled[%d], Sent[%d]\n",
 				spoolerJobs.terminated,spoolerJobs.spooled,spoolerJobs.sentToPrint);
-
+#endif
 		if(spoolerJobs.terminated == numThreads && spoolerJobs.spooled == spoolerJobs.sentToPrint){
+#ifdef DEBUG
 			printf("SPOOLER::Finally the SPOOLER may rest\n");
+#endif
 			break;
 		}
 	}
-
 
 	// notify printer in case no printing jobs occurred to release printer
 	sem_post( &g_printsAvailable);
@@ -442,7 +479,7 @@ void *Spooler( void *){
 	sem_post( &g_spoolerEmpty);
 	sem_post(&g_printerFull);
 
-#if 1
+#ifdef DEBUG
 	printf("SPOOLER::terminating...\n");
 #endif
 	return NULL;
@@ -457,71 +494,75 @@ void *Printer( void *){
 	pthread_mutex_unlock( &g_lock_NUM_PROCESSOR_THREADS );
 
 	string output;
-//	int numPrintsAvailable = 0;
 
 	// create local copies of the counter variables
-//	int deadCount = 0, localNumJobsSpooled, localNumJobsSentToPrint, localNumJobsPrinted = 0;
 	numJobs printerJobs;
 
-#if 1
+#ifdef DEBUG
 	printf("PRINTER::waiting on jobsAvailable\n");
 #endif
     // wait on jobsAvailable to prevent spooler from running w/ no jobs available
 	sem_wait(&g_jobsAvailable);
 
-#if 1
+#ifdef DEBUG
 	printf("PRINTER::waiting on g_lock_spoolerQueue\n");
 #endif
-//	pthread_mutex_lock(    &g_lock_spoolerQueue);
-//		localNumJobsSpooled = g_numJobsSpooled;
-//	pthread_mutex_unlock(  &g_lock_spoolerQueue);
 
 	// repeat while all processor threads have not terminated & jobs left to print
 	while(true){
 		// keep popping jobs off the front of the queue until there are none
-#if 1
+#ifdef DEBUG
 		printf("PRINTER::waiting on g_printerFull\n");
 #endif
 		sem_wait( &g_printerFull);
 		pthread_mutex_lock(   &g_lock_printerQueue );
-#if 1
+#ifdef DEBUG
 			printf("PRINTER::printerQueue size = %lu\n", g_printerQueue.size());
 #endif
 			if(g_printerQueue.size() > 0){
 				output = g_printerQueue.front();
 				g_printerQueue.pop();
-//				g_numJobsPrinted++;
-//				localNumJobsPrinted = g_numJobsPrinted;
 				pthread_mutex_lock(&g_lock_numJobs);
 					g_numJobs.printed++;
 				pthread_mutex_unlock(&g_lock_numJobs);
 				sem_post( &g_printerEmpty);
 			}else{
+#ifdef DEBUG
 				output = "PRINTER::printer should NOT be here!\n";
+#endif
 			}
 		pthread_mutex_unlock( &g_lock_printerQueue );
 
 		cout << output;
 		cout.flush();
 
-#if 1
+#ifdef DEBUG
 		printf("PRINTER::waiting on g_lock_numJobs\n");
 #endif
 		pthread_mutex_lock( &g_lock_numJobs);
 			printerJobs = g_numJobs;
 		pthread_mutex_unlock( &g_lock_numJobs);
 
+#ifdef DEBUG
 		printf("PRINTER::Dead[%d], Spooled[%d], Sent[%d], Prints[%d]\n",
 				printerJobs.terminated,printerJobs.spooled,printerJobs.sentToPrint,printerJobs.printed);
+#endif
 		if(printerJobs.terminated == numThreads && printerJobs.spooled == printerJobs.printed){
+#ifdef DEBUG
 			printf("PRINTER::Finally the PRINTER may rest\n");
+#endif
 			break;
 		}
-	}// end while(deadCount < numThreads || localNumJobsPrinted < localNumJobsSpooled)
-
-
-#if 1
+	}
+#ifdef DEBUG
 	printf("PRINTER::terminating...\n");
 #endif
 	return NULL;
+}
+
+int factorial(int N){
+	int product = 1;
+	for(int i = N; i > 1; --i)
+		product = product * i;
+	return product;
 }

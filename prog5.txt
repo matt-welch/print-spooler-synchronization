@@ -1,0 +1,60 @@
+NewJob 1
+Print Today's
+Compute 7
+Print the
+Compute 3
+Compute 4
+Compute 5
+Print first
+Print day
+Print of
+Compute 2
+Compute 2
+Compute 2
+Compute 2
+Print the
+Print rest
+Print of
+Print your
+Print life.
+Compute 5
+Compute 4
+EndJob
+
+NewJob 2
+Print Hello?
+Print Hello?
+Compute 4
+Print Anybody
+Print out
+Print there?
+Compute 4
+EndJob
+
+NewJob 3
+Compute 3
+EndJob
+NewJob 4
+Compute 4
+EndJob
+
+NewJob 5
+Print This
+Print is
+Print job
+Print five
+Print in
+Print pseudo
+Print program
+Print five.
+EndJob
+
+NewJob 6
+Compute 10
+Print ***
+Print Alert!
+Print ***
+Compute 10
+EndJob
+
+Terminate

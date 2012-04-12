@@ -1,0 +1,63 @@
+NewJob 1
+Compute 7
+Print Ok,
+Compute 3
+Print I'm
+Print running
+Compute 2
+Print out
+Print of
+Print ideas!
+Compute 5
+EndJob
+
+NewJob 2
+Print Print
+Print more.
+Compute 4
+Print Print
+Print more.
+Compute 4
+Print Print
+Print more.
+Compute 4
+Print Print
+Print more.
+Compute 4
+Print Buffer
+Print full.
+EndJob
+
+NewJob 3
+Compute 3
+Compute 3
+Compute 3
+Print Fill
+Print up
+Print the
+Compute 3
+Compute 3
+Compute 3
+Print buffer
+Print again.
+Print Filler.
+Compute 3
+Compute 3
+Compute 3
+Print Filler.
+Print Filler.
+Print Filler.
+Compute 3
+Compute 3
+Compute 3
+Print End.
+EndJob
+
+NewJob 4
+Print Two
+Print words.
+Compute 3
+Compute 5
+Compute 8
+EndJob
+Terminate

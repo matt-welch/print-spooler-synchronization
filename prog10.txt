@@ -1,0 +1,10 @@
+NewJob 1
+Compute 7
+Print A
+Compute 7
+Print PERFECT
+Compute 7
+Print ten!
+Compute 7
+EndJob
+Terminate
