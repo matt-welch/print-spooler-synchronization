@@ -1,0 +1,13 @@
+NewJob 1
+Compute 5
+Print Hello
+Compute 3
+Print Goodbye
+EndJob
+
+NewJob 2
+Print Example
+Compute 4
+EndJob
+
+Terminate

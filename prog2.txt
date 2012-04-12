@@ -1,0 +1,41 @@
+NewJob 1
+Compute 7
+Print Line1
+Compute 3
+Print Line2
+Print Line3
+Compute 2
+Print Line4
+Print Line5
+Print Line6
+Compute 5
+Print Line7
+Compute 4
+Print Line8
+Print Line9
+Print Line10
+EndJob
+
+NewJob 2
+Print Job21
+Print Job22
+Compute 4
+Print Job23
+Compute 4
+EndJob
+
+NewJob 3
+Compute 3
+Compute 3
+Compute 3
+EndJob
+
+NewJob 4
+Print Word41
+Print Word42
+Compute 3
+Compute 5
+Compute 8
+EndJob
+
+Terminate

@@ -1,0 +1,8 @@
+NewJob 1
+Compute 10
+Compute 3
+Compute 6
+Compute 8
+Compute 4
+EndJob
+Terminate

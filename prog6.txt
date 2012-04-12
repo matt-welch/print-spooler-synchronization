@@ -1,0 +1,46 @@
+NewJob 1
+Print Program
+Compute 7
+Print six:
+Compute 1
+Compute 2
+Compute 3
+Compute 4
+Compute 5
+Print job
+Print one.
+Compute 2
+Print Ending...
+Compute 5
+EndJob
+
+NewJob 2
+Print Knock
+Print knock.
+Compute 4
+Print Who's
+Print there?
+Compute 4
+Print Hawaii.
+Print Hawaii
+Print who?
+Print Hawaiiya.
+EndJob
+
+NewJob 3
+Compute 10
+EndJob
+
+NewJob 4
+Print Job
+Print four
+Print of
+Print processor
+Print six
+Print is
+Print only
+Print print
+Print commands.
+EndJob
+
+Terminate

@@ -8,7 +8,7 @@ tidy: clean
 	rm -f *.*~ *~
 
 DEBUG_FLAGS = -g3 -ggdb -O0 -Wall -pedantic -DDEBUG -lpthread
-CONFIG		= -Wall -pedantic -lpthread
+CONFIG		= -Wall -pedantic -lpthread -O0
 EASY_FLAGS	= -lpthread
 
 debug: CONFIG=$(DEBUG_FLAGS)

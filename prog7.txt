@@ -1,0 +1,36 @@
+NewJob 1
+Print Counting
+Print up:
+Print one
+Compute 7
+Print two
+Compute 6
+Print three
+Compute 5
+Print four
+Compute 4
+Print five
+Compute 3
+Print six
+Compute 2
+Print seven
+Compute 1
+Print eight
+EndJob
+
+NewJob 2
+Compute 4
+Compute 4
+EndJob
+
+NewJob 3
+Compute 10
+Print Job
+Print three
+Print of
+Print processor
+Print seven.
+Compute 10
+EndJob
+
+Terminate
