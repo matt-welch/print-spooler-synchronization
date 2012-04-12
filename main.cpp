@@ -64,6 +64,7 @@ const int g_MAX_PROCESSOR_THREADS = 10;
 
 typedef struct _thread_parameters{
 	int tid;
+	queue<string> * program;
 } thread_parameters;
 
 //pthread_mutex_t g_lock_numTerminated = PTHREAD_MUTEX_INITIALIZER; // lock mutex for preventing access to buffer
@@ -212,9 +213,11 @@ int main(int argc, char* argv[]){
 
 	// process commands for all Programs
 	for(int i = 1; i <= numThreads; ++i){
-		queue<string> * program = parseProgram(i);
+		thread_parameters * data = new thread_parameters;
+		data->tid = i;
+		data->program = parseProgram(i);
 		// here's where the magic (synchronization) happens
-		int code = pthread_create(&tid[i], NULL, Processor, (void*)program);
+		int code = pthread_create(&tid[i], NULL, Processor, (void*)data);
 		if( code != 0 ){
 			printf( "Error: unable to create processor thread\n" );
 		}
@@ -257,14 +260,17 @@ void *Processor( void * arg){
 //	thread_parameters* params = (thread_parameters*)arg;
 //	intTID = params->tid;
 
-	queue<string> * program = (queue<string>*)arg;
+	thread_parameters* params = (thread_parameters*)arg;
+	queue<string> * program = params->program;
+	intTID = params->tid;
 
 	pthread_mutex_lock(&g_lock_numJobs);
 		g_numJobs.started++;
-		intTID = g_numJobs.started;
 	pthread_mutex_unlock(&g_lock_numJobs);
 
+#ifdef DEBUG
 	printf("PROCESSOR: ID (%d) beginning...\n", intTID);
+#endif
 
 	ifstream infile;
 	stringstream inFileNameStream, message;
